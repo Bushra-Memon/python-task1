@@ -3,14 +3,38 @@ import jwt
 import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+from marshmallow import Schema, fields, validate, ValidationError
 
 app = Flask(__name__)
 app.config['secret_key'] = 'my_super_secret_key'
 
 users = []
+
+class RegisterSchema(Schema):
+    full_name = fields.Str(required=True, validate=validate.Length(min=3))
+    email = fields.Email(required=True)
+    password = fields.Str(required=True, validate=validate.Length(min=6))
+    country_code = fields.Str(required=True,validate=validate.Length(min=1))
+    phone_number = fields.Str(required=True, validate=validate.Length(min=10, max=10))
+
+class LoginSchema(Schema):
+    email = fields.Email(required=True)
+    password = fields.Str(required=True)
+
+register_schema = RegisterSchema()
+login_schema = LoginSchema()
+
 @app.route('/register', methods=['POST'])
 def register():
-    data = request.json
+    try:
+        data = register_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify({
+            "message": "Validation error",
+            "status": 0,
+            "errors": err.messages,
+            "code": 400
+        }),400
 
     for user in users:
         if user['email'] == data['email']:
@@ -20,6 +44,7 @@ def register():
                 "data": {},
                 "code": 400
             })
+
     hashed_password = generate_password_hash(data['password'])
 
     new_user = {
@@ -44,11 +69,19 @@ def register():
             "phone_number": new_user['phone_number']
         },
         "code": 201
-    })
+    }),201
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.json
+    try:
+        data = login_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify({
+            "message": "Validation error",
+            "status": 0,
+            "errors": err.messages,
+            "code": 400
+        }),400
 
     user = next((u for u in users if u['email'] == data['email']), None)
 
@@ -58,7 +91,7 @@ def login():
             "status": 0,
             "data": {},
             "code": 404
-        })
+        }),404
     
     if not check_password_hash(user['password'], data['password']):
         return jsonify({
@@ -66,7 +99,7 @@ def login():
             "status": 0, 
             "data": {},
             "code": 401
-        })
+        }),401
 
     token = jwt.encode({
         "public_id": user['id'],
@@ -85,14 +118,14 @@ def login():
             "phone_number": user['phone_number']
         },
         "code": 200
-    })
+    }),200
 
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
 
-        if "AUthorization" in request.headers:
+        if "Authorization" in request.headers:
             token = request.headers['Authorization'].split(" ")[1]
 
         if not token:
@@ -100,7 +133,7 @@ def token_required(f):
                 "message": "Token missing",
                 "status": 0,
                 "code": 401
-            })
+            }),401
 
         try:
             jwt.decode(token, app.config['secret_key'], algorithms=["HS256"])
@@ -109,13 +142,13 @@ def token_required(f):
                 "message": "Token expired",
                 "status": 0,
                 "code": 401
-            })
+            }),401
         except jwt.InvalidTokenError:
             return jsonify({
                 "message": "Invalid token",
                 "status": 0,
                 "code": 401
-            })
+            }),401
         return f(*args, **kwargs)
 
     return decorated
@@ -127,7 +160,7 @@ def profile():
         "message": "Token is valid, access granted",
         "status": 1,
         "code": 200
-    })
+    }),200
 
 if __name__ == '__main__':
     app.run(debug=True)
