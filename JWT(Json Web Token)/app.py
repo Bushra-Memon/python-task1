@@ -26,15 +26,11 @@ login_schema = LoginSchema()
 
 @app.route('/register', methods=['POST'])
 def register():
-    try:
-        data = register_schema.load(request.json)
-    except ValidationError as err:
-        return jsonify({
-            "message": "Validation error",
-            "status": 0,
-            "errors": err.messages,
-            "code": 400
-        }),400
+    errors = register_schema.validate(request.json)
+    if errors:
+        return jsonify(errors), 400
+
+    data = request.json
 
     for user in users:
         if user['email'] == data['email']:
@@ -43,7 +39,7 @@ def register():
                 "status": 0,
                 "data": {},
                 "code": 400
-            })
+            }),400
 
     hashed_password = generate_password_hash(data['password'])
 
@@ -73,15 +69,12 @@ def register():
 
 @app.route('/login', methods=['POST'])
 def login():
-    try:
-        data = login_schema.load(request.json)
-    except ValidationError as err:
-        return jsonify({
-            "message": "Validation error",
-            "status": 0,
-            "errors": err.messages,
-            "code": 400
-        }),400
+    errors = login_schema.validate(request.json)
+    if errors:
+       return jsonify(errors), 400
+
+    data = request.json
+
 
     user = next((u for u in users if u['email'] == data['email']), None)
 
@@ -164,6 +157,7 @@ def profile():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
